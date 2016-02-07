@@ -69,7 +69,7 @@ class MacPlatform(Platform):
         )
 
     def wait_user(self, message, stdout=subprocess.DEVNULL,
-                  stderr=subprocess.DEVNULL, timeout=43200, **kwargs):
+                  stderr=subprocess.DEVNULL, timeout=3600, **kwargs):
         """Wait for user input.
 
         :param message: str to display to the user
@@ -77,7 +77,7 @@ class MacPlatform(Platform):
             default subprocess.DEVNULL
         :param stderr: int constant from subprocess to direct stderr,
             default subprocess.DEVNULL
-        :param timeout: int in seconds, default 12 hours
+        :param timeout: int in seconds, default 1 hour
         :param kwargs: dict remaining keyword arguments that will be
             passed to subprocess.call
         """
