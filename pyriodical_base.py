@@ -23,6 +23,11 @@ import os
 import argparse
 import sys
 import logging
+import subprocess
+import traceback
+import datetime
+
+from class_schedule import in_class
 
 from .platforms import PlatformFactory
 
@@ -65,6 +70,13 @@ class PyriodicalBase:
             '-s', '--status',
             default=False, action='store_true',
             help="get status of this periodical, and exit"
+        )
+
+        arg_parser.add_argument(
+            '-c', '--could-run-now',
+            default=False, action='store_true',
+            help="print whether this pyriodical could run now, "
+                 "and exit"
         )
 
         if self.platform.supports('open_text_file'):
@@ -116,6 +128,38 @@ class PyriodicalBase:
             recover_from_error can choose to handle it in some way.
         """
         pass
+
+    @staticmethod
+    def can_reach_server(server):
+        # TODO some servers don't accept ping. should handle those cases.
+        command = '/sbin/ping -c 1 {server} -t 1 >>/dev/null 2>&1'.format(server=server)
+        return subprocess.call(command, shell=True) == 0
+
+    _has_internet = None
+    _last_internet_check_dt = None
+
+    @classmethod
+    def has_internet(cls):
+        # haven't checked yet, so immediately check and return
+        if cls._last_internet_check_dt is None:
+            cls._last_internet_check_dt = datetime.datetime.now()
+            cls._has_internet = (
+                cls.can_reach_server('8.8.8.8')
+                or cls.can_reach_server('8.8.4.4')
+            )
+            return cls._has_internet
+
+        last_checked_internet_minutes = (datetime.datetime.now() - cls._last_internet_check_dt).total_seconds() / 60
+        if cls._has_internet and last_checked_internet_minutes < 1:
+            return cls._has_internet
+
+        cls._has_internet = (
+            cls.can_reach_server('8.8.8.8')
+            or cls.can_reach_server('8.8.4.4')
+        )
+        cls._last_internet_check_dt = datetime.datetime.now()
+
+        return cls._has_internet
 
     def _edit_perform_file(self):
         """Edit the "performed" file
@@ -222,8 +266,16 @@ class PyriodicalBase:
 
         :rtype: logging.Logger corresponding to the subclass
         """
+
         if self.logger is None:
+
+            logging.basicConfig(level=logging.DEBUG)
+            # set level of root logger
+            logging.getLogger().setLevel(logging.DEBUG)
+
             self.logger = logging.getLogger(self.name)
+            self.logger.setLevel(level=logging.DEBUG)
+
         return self.logger
 
     def _get_performed_file_name(self):
@@ -338,7 +390,10 @@ class PyriodicalBase:
             cld_run_now=cld_run_now,
         )
 
-    def main(self):
+    def needs_internet(self):
+        return False
+
+    def main(self, log=False):
         """Run the periodical
         """
         cl_args = self.arg_parser.parse_args()
@@ -355,6 +410,11 @@ class PyriodicalBase:
         if getattr(cl_args, 'status', False):
             print(self._get_status(token))
             return
+        if getattr(cl_args, 'could_run_now', False):
+            print('could run now: {} {}'.format(
+                self.could_run_now(token), self.name
+            ))
+            return
 
         # shouldn't perform now, or already performed
         if (not self.should_perform_now() or
@@ -369,11 +429,25 @@ class PyriodicalBase:
                 not self.platform.confirm_user(self.confirm_user_str)):
             return
 
+        needs_internet = self.needs_internet()
+        has_internet = self.has_internet() if needs_internet else None
+
+        if needs_internet and not has_internet:
+            if log:
+                self.get_logger().error(
+                    "need internet but has no internet; can't perform; exiting"
+                )
+            return 1
+
+        if log:
+            self.get_logger().info("performing {}".format(self.name))
+
         try:
             success = self.perform()
         except KeyboardInterrupt:
             raise
         except Exception as exception:
+            print(traceback.format_exc())
             self.recover_from_error(exception)
             raise
 
@@ -382,3 +456,7 @@ class PyriodicalBase:
 
         exit_code = 0 if success else 1
         return exit_code
+
+    @staticmethod
+    def in_class():
+        return in_class()

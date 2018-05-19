@@ -81,20 +81,23 @@ class MacPlatform(Platform):
         :param kwargs: dict remaining keyword arguments that will be
             passed to subprocess.call
         """
-        result = subprocess.call(
-            [
-                'osascript',
-                '-e', 'tell application "System Events"',
-                '-e', 'with timeout of {} seconds'.format(timeout),
-                '-e', 'display dialog "{}"'.format(message),
-                '-e', 'end timeout',
-                '-e', 'end tell',
-            ],
+        command = ["""osascript <<EOF
+            tell application "System Events"
+                with timeout of 86400 seconds
+                    display dialog "{message}"
+                end timeout
+            end tell\nEOF""".format(
+            #timeout=timeout,
+            message=message
+        )]
+        exit_code = subprocess.call(
+            command,
             stdout=stdout,
             stderr=stderr,
+            shell=True,
             **kwargs
         )
-        return result
+        return exit_code
 
     def confirm_user(self, message):
         """Get permission from the user
