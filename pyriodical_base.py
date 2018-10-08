@@ -79,6 +79,12 @@ class PyriodicalBase:
                  "and exit"
         )
 
+        arg_parser.add_argument(
+            '-f', '--force',
+            default=False, action='store_true',
+            help="run even if the token has already been run"
+        )
+
         if self.platform.supports('open_text_file'):
             arg_parser.add_argument(
                 '-e', '--edit-perform-file',
@@ -417,8 +423,9 @@ class PyriodicalBase:
             return
 
         # shouldn't perform now, or already performed
-        if (not self.should_perform_now() or
-                self._have_performed(token)):
+        if not self.should_perform_now():
+            return
+        if self._have_performed(token) and not cl_args.force:
             return
 
         # if this periodical requires confirmation before executing,
